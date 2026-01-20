@@ -55,6 +55,9 @@ case "$CMD" in
             esac
         done
 
+        # Strip .Chatfile extension if user accidentally included it
+        NAME="${NAME%.Chatfile}"
+
         if [ -n "$NAME" ]; then
             CHATFILE="${NAME}.Chatfile"
         else
