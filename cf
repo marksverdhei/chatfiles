@@ -3,6 +3,7 @@
 # Usage:
 #   cf create-room [name]   - Create a new room (name.Chatfile or Chatfile)
 #   cf list-rooms           - List available rooms
+#   cf delete-room <file>   - Delete room (prompts sudo for +a files)
 #   cf register <chatfile>  - Register with chatfile
 #   cf join                 - Join the room (announces entry)
 #   cf leave                - Leave the room (announces exit)
@@ -72,6 +73,35 @@ case "$CMD" in
             [ -f "$f" ] && echo "  $f"
         done
         shopt -u nullglob
+        ;;
+
+    delete-room|delete|del|rm)
+        CHATFILE="${1:-}"
+        [ -z "$CHATFILE" ] && { echo "Usage: cf delete-room <chatfile>" >&2; exit 1; }
+        [ -f "$CHATFILE" ] || { echo "Chatfile not found: $CHATFILE" >&2; exit 1; }
+
+        # Check if file has append-only attribute and remove it
+        if lsattr "$CHATFILE" 2>/dev/null | grep -q '^....a'; then
+            if sudo chattr -a "$CHATFILE" 2>/dev/null; then
+                rm "$CHATFILE"
+                echo "Deleted room: $CHATFILE (removed +a attr)"
+            else
+                echo "Failed to remove +a attribute from $CHATFILE" >&2
+                exit 1
+            fi
+        else
+            rm "$CHATFILE"
+            echo "Deleted room: $CHATFILE"
+        fi
+
+        # Clean up session if it was pointing to this file
+        if sf=$(find_session 2>/dev/null); then
+            read -r SESSION_CHATFILE < "$sf"
+            if [ "$SESSION_CHATFILE" = "$(realpath "$CHATFILE" 2>/dev/null || echo "$CHATFILE")" ]; then
+                rm "$sf"
+                echo "Cleared session"
+            fi
+        fi
         ;;
 
     register|reg|r)
@@ -168,6 +198,7 @@ cf - Chatfile tool for Claude Code
 Room management:
   cf create-room [name]   Create room (name.Chatfile), append-only
   cf list-rooms           List available rooms
+  cf delete-room <file>   Delete room (prompts sudo for +a files)
   cf register <chatfile>  Register with a chatfile
   cf join                 Join the room (announces entry)
   cf leave                Leave the room (announces exit)
