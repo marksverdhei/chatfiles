@@ -1,10 +1,10 @@
 #!/bin/bash
 # Chatfile tool for Claude Code
 # Usage:
-#   cf create-room [name]   - Create a new room (name.Chatfile or Chatfile)
-#   cf list-rooms           - List available rooms
-#   cf delete-room <file>   - Delete room (prompts sudo for +a files)
-#   cf register <chatfile>  - Register with chatfile
+#   cf create-room [name] [-g] - Create room (local or global with -g)
+#   cf list-rooms              - List local and global rooms
+#   cf delete-room <file>      - Delete room (prompts sudo for +a files)
+#   cf register <name>         - Register with chatfile (searches local & global)
 #   cf join                 - Join the room (announces entry)
 #   cf leave                - Leave the room (announces exit)
 #   cf send "message"       - Send message
@@ -14,6 +14,8 @@
 # State stored in .cf_session (no env vars needed)
 
 set -e
+
+GLOBAL_DIR="$HOME/.chatfiles"
 
 CMD="${1:-help}"
 shift 2>/dev/null || true
@@ -44,11 +46,24 @@ save_session() {
 
 case "$CMD" in
     create-room|create|cr)
-        NAME="${1:-}"
+        GLOBAL=false
+        NAME=""
+        for arg in "$@"; do
+            case "$arg" in
+                -g|--global) GLOBAL=true ;;
+                *) NAME="$arg" ;;
+            esac
+        done
+
         if [ -n "$NAME" ]; then
             CHATFILE="${NAME}.Chatfile"
         else
             CHATFILE="Chatfile"
+        fi
+
+        if $GLOBAL; then
+            mkdir -p "$GLOBAL_DIR"
+            CHATFILE="$GLOBAL_DIR/$CHATFILE"
         fi
 
         if [ -f "$CHATFILE" ]; then
@@ -67,21 +82,55 @@ case "$CMD" in
         ;;
 
     list-rooms|list|ls)
-        echo "Available rooms:"
         shopt -s nullglob
-        for f in *.Chatfile Chatfile; do
-            [ -f "$f" ] && echo "  $f"
-        done
+
+        # Local rooms
+        local_rooms=(*.Chatfile Chatfile)
+        if [ ${#local_rooms[@]} -gt 0 ]; then
+            echo "Local rooms:"
+            for f in "${local_rooms[@]}"; do
+                [ -f "$f" ] && echo "  $f"
+            done
+        fi
+
+        # Global rooms
+        if [ -d "$GLOBAL_DIR" ]; then
+            global_rooms=("$GLOBAL_DIR"/*.Chatfile "$GLOBAL_DIR"/Chatfile)
+            has_global=false
+            for f in "${global_rooms[@]}"; do
+                [ -f "$f" ] && has_global=true && break
+            done
+            if $has_global; then
+                echo "Global rooms (~/.chatfiles):"
+                for f in "${global_rooms[@]}"; do
+                    [ -f "$f" ] && echo "  $(basename "$f")"
+                done
+            fi
+        fi
+
         shopt -u nullglob
         ;;
 
     delete-room|delete|del|rm)
         CHATFILE="${1:-}"
         [ -z "$CHATFILE" ] && { echo "Usage: cf delete-room <chatfile>" >&2; exit 1; }
-        [ -f "$CHATFILE" ] || { echo "Chatfile not found: $CHATFILE" >&2; exit 1; }
+
+        # Try to find the chatfile: local first, then global
+        if [ -f "$CHATFILE" ]; then
+            :
+        elif [ -f "${CHATFILE}.Chatfile" ]; then
+            CHATFILE="${CHATFILE}.Chatfile"
+        elif [ -f "$GLOBAL_DIR/$CHATFILE" ]; then
+            CHATFILE="$GLOBAL_DIR/$CHATFILE"
+        elif [ -f "$GLOBAL_DIR/${CHATFILE}.Chatfile" ]; then
+            CHATFILE="$GLOBAL_DIR/${CHATFILE}.Chatfile"
+        else
+            echo "Chatfile not found: $CHATFILE" >&2
+            exit 1
+        fi
 
         # Check if file has append-only attribute and remove it
-        if lsattr "$CHATFILE" 2>/dev/null | grep -q '^....a'; then
+        if lsattr "$CHATFILE" 2>/dev/null | cut -d' ' -f1 | grep -q 'a'; then
             if sudo chattr -a "$CHATFILE" 2>/dev/null; then
                 rm "$CHATFILE"
                 echo "Deleted room: $CHATFILE (removed +a attr)"
@@ -106,9 +155,21 @@ case "$CMD" in
 
     register|reg|r)
         CHATFILE="${1:-Chatfile}"
-        CHATFILE=$(realpath "$CHATFILE" 2>/dev/null || echo "$CHATFILE")
 
-        [ -f "$CHATFILE" ] || { echo "Chatfile not found: $CHATFILE" >&2; exit 1; }
+        # Try to find the chatfile: local first, then global
+        if [ -f "$CHATFILE" ]; then
+            CHATFILE=$(realpath "$CHATFILE")
+        elif [ -f "${CHATFILE}.Chatfile" ]; then
+            CHATFILE=$(realpath "${CHATFILE}.Chatfile")
+        elif [ -f "$GLOBAL_DIR/$CHATFILE" ]; then
+            CHATFILE="$GLOBAL_DIR/$CHATFILE"
+        elif [ -f "$GLOBAL_DIR/${CHATFILE}.Chatfile" ]; then
+            CHATFILE="$GLOBAL_DIR/${CHATFILE}.Chatfile"
+        else
+            echo "Chatfile not found: $CHATFILE" >&2
+            echo "Searched: ./, ~/.chatfiles/" >&2
+            exit 1
+        fi
 
         ADJS=(swift bold calm keen sage wild bright dark quick slow)
         NOUNS=(fox owl raven wolf bear hawk crane lynx deer hare)
@@ -196,10 +257,11 @@ case "$CMD" in
 cf - Chatfile tool for Claude Code
 
 Room management:
-  cf create-room [name]   Create room (name.Chatfile), append-only
-  cf list-rooms           List available rooms
+  cf create-room [name]   Create local room (name.Chatfile), append-only
+  cf create-room -g name  Create global room in ~/.chatfiles/
+  cf list-rooms           List local and global rooms
   cf delete-room <file>   Delete room (prompts sudo for +a files)
-  cf register <chatfile>  Register with a chatfile
+  cf register <name>      Register with chatfile (searches local & global)
   cf join                 Join the room (announces entry)
   cf leave                Leave the room (announces exit)
 
@@ -213,6 +275,7 @@ Info:
   cf status               Show current session
 
 State stored in .cf_session (current directory)
+Global rooms stored in ~/.chatfiles/
 EOF
         ;;
 esac
