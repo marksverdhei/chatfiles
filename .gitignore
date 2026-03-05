@@ -1,1 +1,4 @@
 __pycache__
+.cf_session*
+*.Chatfile
+Chatfile
