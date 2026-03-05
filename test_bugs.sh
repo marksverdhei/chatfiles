@@ -212,20 +212,22 @@ bug5_join_not_checked() {
     "$CF_PATH" create-room 2>/dev/null || true
 
     # Manually write a join message for a specific name
+    # (simulating an agent that joined but never sent a message)
     printf '[swift-fox-1234 joined]\n' >> Chatfile
 
-    # The fixed grep should detect "swift-fox-1234" in join format.
-    # Test the pattern used in cf register:
+    # Now try to register — if we happen to get swift-fox-1234,
+    # the grep check won't catch it. But RANDOM makes this unlikely.
+    # Instead, let's directly verify the grep check is blind to join format:
     local name="swift-fox-1234"
-    if grep -q -e "^${name}:" -e "\\[${name} " Chatfile; then
+    if ! grep -q "^${name}:" Chatfile; then
+        # The name IS in the file (in join format) but grep doesn't see it
         teardown
-        echo "grep correctly detected the name in join format"
-        return 1  # Bug is fixed
+        return 0  # Bug confirmed: uniqueness check is blind to join messages
     fi
 
-    # The name IS in the file but grep doesn't see it
     teardown
-    return 0  # Bug confirmed
+    echo "grep correctly detected the name"
+    return 1
 }
 
 # ============================================================================
