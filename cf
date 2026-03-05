@@ -251,8 +251,10 @@ case "$CMD" in
         # No unread messages — wait for new ones
         LASTLINE=$TOTAL
         save_session
-        tail -f -n 0 "$CHATFILE" | while IFS= read -r line; do
-            # Skip system/join/leave lines and own messages
+        exec 3< <(tail -f -n 0 "$CHATFILE")
+        TAILPID=$!
+        trap 'kill $TAILPID 2>/dev/null' EXIT
+        while IFS= read -r line <&3; do
             case "$line" in
                 \[*) continue ;;
                 "${MYNAME}:"*) continue ;;
@@ -262,6 +264,9 @@ case "$CMD" in
             echo "$line"
             break
         done
+        kill $TAILPID 2>/dev/null
+        exec 3<&-
+        trap - EXIT
         ;;
 
     send-await|sa)
@@ -269,10 +274,13 @@ case "$CMD" in
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
         msg="${1//$'\n'/ }"
+        exec 3< <(tail -f -n 0 "$CHATFILE")
+        TAILPID=$!
+        trap 'kill $TAILPID 2>/dev/null' EXIT
         printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
         LASTLINE=$(wc -l < "$CHATFILE")
         save_session
-        tail -f -n 0 "$CHATFILE" | while IFS= read -r line; do
+        while IFS= read -r line <&3; do
             case "$line" in
                 \[*) continue ;;
                 "${MYNAME}:"*) continue ;;
@@ -282,6 +290,9 @@ case "$CMD" in
             echo "$line"
             break
         done
+        kill $TAILPID 2>/dev/null
+        exec 3<&-
+        trap - EXIT
         ;;
 
     read|cat)
