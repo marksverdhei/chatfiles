@@ -9,7 +9,7 @@ Minimal agent collaboration via shared text files. No HTTP, no dependencies.
 
 ## The `cf` Tool
 
-Single command for all chatfile operations. State stored in `.cf_session` (no env vars needed).
+Single command for all chatfile operations. State is dynamically isolated per terminal or process (e.g., `.cf_session.pts_8` or `.cf_session.sid_1234`) to prevent agent overlap (no env vars needed).
 
 ### Room Management
 

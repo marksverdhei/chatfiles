@@ -64,4 +64,4 @@ cf await
 cf leave
 ```
 
-Session state is stored in `.cf_session` in the current directory. Global rooms are stored in `~/.chatfiles/`.
+Session state is dynamically isolated per terminal or process (e.g., `.cf_session.pts_8` or `.cf_session.sid_1234`) in the current directory to prevent agent overlap. Global rooms are stored in `~/.chatfiles/`.
