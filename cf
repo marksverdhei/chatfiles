@@ -36,12 +36,14 @@ load_session() {
     read -r CHATFILE < "$sf"
     read -r MYNAME < <(sed -n '2p' "$sf")
     JOINED=$(sed -n '3p' "$sf")
+    LASTLINE=$(sed -n '4p' "$sf")
+    LASTLINE="${LASTLINE:-0}"
 }
 
 save_session() {
     local sf
     sf=$(find_session) || sf=".cf_session"
-    printf '%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" > "$sf"
+    printf '%s\n%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" "$LASTLINE" > "$sf"
 }
 
 case "$CMD" in
@@ -183,12 +185,21 @@ case "$CMD" in
             noun="${NOUNS[RANDOM % ${#NOUNS[@]}]}"
             suffix=$((RANDOM % 9000 + 1000))
             MYNAME="${adj}-${noun}-${suffix}"
-            grep -q "^${MYNAME}:" "$CHATFILE" 2>/dev/null || break
-            ((attempts++))
+            # Check both message format (name:) and join/leave format ([name ...])
+            if ! grep -q -e "^${MYNAME}:" -e "\\[${MYNAME} " "$CHATFILE" 2>/dev/null; then
+                break
+            fi
+            ((attempts++)) || true
         done
 
+        if [ $attempts -ge 100 ]; then
+            echo "Failed to generate unique name after 100 attempts" >&2
+            exit 1
+        fi
+
         JOINED=""
-        printf '%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" > .cf_session
+        LASTLINE=0
+        printf '%s\n%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" "$LASTLINE" > .cf_session
         echo "$MYNAME"
         ;;
 
@@ -196,8 +207,9 @@ case "$CMD" in
         load_session
         [ -n "$JOINED" ] && { echo "Already joined as $MYNAME" >&2; exit 1; }
         JOINED="yes"
-        save_session
         printf '[%s joined]\n' "$MYNAME" >> "$CHATFILE"
+        LASTLINE=$(wc -l < "$CHATFILE")
+        save_session
         echo "Joined as $MYNAME"
         ;;
 
@@ -214,26 +226,62 @@ case "$CMD" in
         [ -z "$1" ] && { echo "Usage: cf send \"message\"" >&2; exit 1; }
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        printf '%s: %s\n' "$MYNAME" "$1" >> "$CHATFILE"
+        # Strip newlines to preserve one-message-one-line invariant
+        msg="${1//$'\n'/ }"
+        printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
+        LASTLINE=$(wc -l < "$CHATFILE")
+        save_session
         ;;
 
     await|a|wait|w)
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        LAST=$(tail -n 1 "$CHATFILE" | cut -d: -f1)
-        if [ "$LAST" = "$MYNAME" ]; then
-            tail -f -n 0 "$CHATFILE" | head -n 1
-        else
-            tail -n 1 "$CHATFILE"
+        TOTAL=$(wc -l < "$CHATFILE")
+        # Check for unread messages from others (skip system/join/leave lines)
+        if [ "$TOTAL" -gt "$LASTLINE" ]; then
+            # Look for a message line (name: msg) from someone else
+            line=$(tail -n +"$((LASTLINE + 1))" "$CHATFILE" | grep -v '^\[' | grep -v "^${MYNAME}:" | head -n 1)
+            if [ -n "$line" ]; then
+                LASTLINE=$TOTAL
+                save_session
+                echo "$line"
+                exit 0
+            fi
         fi
+        # No unread messages — wait for new ones
+        LASTLINE=$TOTAL
+        save_session
+        tail -f -n 0 "$CHATFILE" | while IFS= read -r line; do
+            # Skip system/join/leave lines and own messages
+            case "$line" in
+                \[*) continue ;;
+                "${MYNAME}:"*) continue ;;
+            esac
+            LASTLINE=$(wc -l < "$CHATFILE")
+            save_session
+            echo "$line"
+            break
+        done
         ;;
 
     send-await|sa)
         [ -z "$1" ] && { echo "Usage: cf send-await \"message\"" >&2; exit 1; }
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        printf '%s: %s\n' "$MYNAME" "$1" >> "$CHATFILE"
-        tail -f -n 0 "$CHATFILE" | head -n 1
+        msg="${1//$'\n'/ }"
+        printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
+        LASTLINE=$(wc -l < "$CHATFILE")
+        save_session
+        tail -f -n 0 "$CHATFILE" | while IFS= read -r line; do
+            case "$line" in
+                \[*) continue ;;
+                "${MYNAME}:"*) continue ;;
+            esac
+            LASTLINE=$(wc -l < "$CHATFILE")
+            save_session
+            echo "$line"
+            break
+        done
         ;;
 
     read|cat)
