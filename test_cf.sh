@@ -26,6 +26,7 @@ setup() {
     cd "$TEST_DIR"
     # Create mock global dir to avoid touching real ~/.chatfiles
     export HOME="$TEST_DIR/home"
+    export CF_SESSION_FILE=".cf_session"
     mkdir -p "$HOME"
 }
 

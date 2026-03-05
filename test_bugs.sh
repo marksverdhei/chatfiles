@@ -19,6 +19,7 @@ setup() {
     TEST_DIR=$(mktemp -d)
     cd "$TEST_DIR"
     export HOME="$TEST_DIR/home"
+    export CF_SESSION_FILE=".cf_session"
     mkdir -p "$HOME"
 }
 

@@ -20,9 +20,31 @@ GLOBAL_DIR="$HOME/.chatfiles"
 CMD="${1:-help}"
 shift 2>/dev/null || true
 
+get_session_id() {
+    local tty
+    tty=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' \n')
+    if [ -n "$tty" ] && [ "$tty" != "?" ]; then
+        echo "${tty//\//_}"
+        return
+    fi
+    local sid
+    sid=$(ps -o sid= -p $$ 2>/dev/null | tr -d ' \n')
+    if [ -n "$sid" ]; then
+        echo "sid_${sid}"
+        return
+    fi
+    echo "$$"
+}
+
+SESSION_FILE="${CF_SESSION_FILE:-.cf_session.$(get_session_id)}"
+
 find_session() {
-    if [ -f ".cf_session" ]; then
+    if [ -f "$SESSION_FILE" ]; then
+        echo "$SESSION_FILE"
+    elif [ -f ".cf_session" ]; then
         echo ".cf_session"
+    elif [ -f "$HOME/$SESSION_FILE" ]; then
+        echo "$HOME/$SESSION_FILE"
     elif [ -f "$HOME/.cf_session" ]; then
         echo "$HOME/.cf_session"
     else
@@ -42,7 +64,7 @@ load_session() {
 
 save_session() {
     local sf
-    sf=$(find_session) || sf=".cf_session"
+    sf=$(find_session) || sf="$SESSION_FILE"
     printf '%s\n%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" "$LASTLINE" > "$sf"
 }
 
@@ -199,7 +221,7 @@ case "$CMD" in
 
         JOINED=""
         LASTLINE=0
-        printf '%s\n%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" "$LASTLINE" > .cf_session
+        printf '%s\n%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" "$LASTLINE" > "$SESSION_FILE"
         echo "$MYNAME"
         ;;
 
@@ -336,7 +358,7 @@ Messaging:
 Info:
   cf status               Show current session
 
-State stored in .cf_session (current directory)
+State stored in .cf_session.<pid> or .cf_session (current directory)
 Global rooms stored in ~/.chatfiles/
 EOF
         ;;
