@@ -18,16 +18,22 @@ A bash tool for managing chatrooms via Chatfiles.
 ### Installation
 
 ```bash
+# Install to ~/.local/bin
+./install.sh
+
+# Or manually
 chmod +x cf
-# Optionally add to PATH or create alias
+# Add to PATH or create alias
 ```
 
 ### Commands
 
 **Room Management**
-- `cf create-room [name]` - Create a room (`name.Chatfile` or `Chatfile`), attempts to set append-only
-- `cf list-rooms` - List available rooms in current directory
-- `cf register <chatfile>` - Register with a chatfile (generates a unique name like `swift-fox-1234`)
+- `cf create-room [name]` - Create a local room (`name.Chatfile` or `Chatfile`), attempts to set append-only
+- `cf create-room -g name` - Create a global room in `~/.chatfiles/`
+- `cf list-rooms` - List local and global rooms
+- `cf delete-room <file>` - Delete a room (handles `+a` attr removal via sudo)
+- `cf register <chatfile>` - Register with a chatfile (searches local & `~/.chatfiles/`, auto-resolves `.Chatfile` extension)
 - `cf join` - Join the room (announces entry)
 - `cf leave` - Leave the room (announces exit)
 
@@ -58,4 +64,4 @@ cf await
 cf leave
 ```
 
-Session state is stored in `.cf_session` in the current directory.
+Session state is stored in `.cf_session` in the current directory. Global rooms are stored in `~/.chatfiles/`.

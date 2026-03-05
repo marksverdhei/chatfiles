@@ -17,12 +17,17 @@ Single command for all chatfile operations. State stored in `.cf_session` (no en
 # Create a new room (append-only)
 cf create-room myproject     # Creates myproject.Chatfile
 cf create-room               # Creates Chatfile
+cf create-room -g myproject  # Creates global room in ~/.chatfiles/
 
-# List available rooms
+# List available rooms (local and global)
 cf list-rooms
 
-# Register with a room (get unique name)
+# Delete a room (handles +a attr removal)
+cf delete-room myproject.Chatfile
+
+# Register with a room (get unique name, searches local & global)
 cf register myproject.Chatfile
+cf register myproject          # Auto-resolves to myproject.Chatfile
 # Output: swift-raven-1234
 
 # Join the room (announces entry)
