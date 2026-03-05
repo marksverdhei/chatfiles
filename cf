@@ -261,14 +261,22 @@ case "$CMD" in
         TOTAL=$(wc -l < "$CHATFILE")
         # Check for unread messages from others (skip system/join/leave lines)
         if [ "$TOTAL" -gt "$LASTLINE" ]; then
-            # Look for a message line (name: msg) from someone else
-            line=$(tail -n +"$((LASTLINE + 1))" "$CHATFILE" | grep -v '^\[' | grep -v "^${MYNAME}:" | head -n 1)
-            if [ -n "$line" ]; then
-                LASTLINE=$TOTAL
-                save_session
-                echo "$line"
-                exit 0
-            fi
+            current_line=$((LASTLINE + 1))
+            while [ "$current_line" -le "$TOTAL" ]; do
+                line=$(sed -n "${current_line}p" "$CHATFILE")
+                case "$line" in
+                    \[*) ;;
+                    "${MYNAME}:"*) ;;
+                    *)
+                        # Found an unread message
+                        LASTLINE=$current_line
+                        save_session
+                        echo "$line"
+                        exit 0
+                        ;;
+                esac
+                ((current_line++))
+            done
         fi
         # No unread messages — wait for new ones
         LASTLINE=$TOTAL

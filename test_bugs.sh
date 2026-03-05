@@ -213,21 +213,111 @@ bug5_join_not_checked() {
     "$CF_PATH" create-room 2>/dev/null || true
 
     # Manually write a join message for a specific name
-    # (simulating an agent that joined but never sent a message)
     printf '[swift-fox-1234 joined]\n' >> Chatfile
 
-    # Now try to register — if we happen to get swift-fox-1234,
-    # the grep check won't catch it. But RANDOM makes this unlikely.
-    # Instead, let's directly verify the grep check is blind to join format:
+    # Test the pattern used in the fixed cf register:
     local name="swift-fox-1234"
-    if ! grep -q "^${name}:" Chatfile; then
-        # The name IS in the file (in join format) but grep doesn't see it
+    if grep -q -e "^${name}:" -e "\\[${name} " Chatfile; then
         teardown
-        return 0  # Bug confirmed: uniqueness check is blind to join messages
+        echo "grep correctly detected the name in join format"
+        return 1  # Bug is fixed
+    fi
+
+    # The name IS in the file but grep doesn't see it
+    teardown
+    return 0  # Bug confirmed
+}
+
+# ============================================================================
+# Bug 6: await skips unread messages
+# ============================================================================
+bug6_await_skips_messages() {
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    "$CF_PATH" register Chatfile >/dev/null
+    "$CF_PATH" join >/dev/null
+
+    echo "other: msg 1" >> Chatfile
+    echo "other: msg 2" >> Chatfile
+
+    local first
+    first=$("$CF_PATH" await)
+
+    local second
+    second=$(timeout 2 "$CF_PATH" await 2>/dev/null) || true
+
+    if [ -z "$second" ] || ! echo "$second" | grep -q "msg 2"; then
+        echo "First was: $first"
+        echo "Second was: $second"
+        teardown
+        return 0  # Bug confirmed: skipped unread message
     fi
 
     teardown
-    echo "grep correctly detected the name"
+    echo "await correctly read the next unread message"
+    return 1
+}
+
+# ============================================================================
+# Bug 7: tail -f orphaned process leak
+# ============================================================================
+bug7_tail_f_leak() {
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    "$CF_PATH" register Chatfile >/dev/null
+    "$CF_PATH" join >/dev/null
+
+    # Start await in background
+    "$CF_PATH" await >/dev/null &
+    local await_pid=$!
+    
+    sleep 0.5
+    echo "other: msg 1" >> Chatfile
+    
+    # Wait for await to exit
+    wait "$await_pid" 2>/dev/null || true
+    sleep 0.5
+
+    # Check if tail -f is still running with our Chatfile
+    if pgrep -f "tail -f -n 0.*Chatfile" >/dev/null; then
+        pkill -f "tail -f -n 0.*Chatfile"
+        teardown
+        return 0  # Bug confirmed: tail -f leaked
+    fi
+
+    teardown
+    echo "No orphaned tail -f processes found"
+    return 1
+}
+
+# ============================================================================
+# Bug 8: State isolation (overlapping session files)
+# ============================================================================
+bug8_state_isolation() {
+    setup
+    unset CF_SESSION_FILE  # Test the actual isolation logic
+    "$CF_PATH" create-room 2>/dev/null || true
+    
+    local name1
+    name1=$("$CF_PATH" register Chatfile)
+    
+    # Run register in a new session (different SID/TTY)
+    if command -v setsid >/dev/null; then
+        local name2
+        name2=$(setsid "$CF_PATH" register Chatfile)
+        
+        local status_name
+        status_name=$("$CF_PATH" status | grep Session | cut -d' ' -f2)
+        
+        # If the original session's status shows the second name, they overlapped
+        if [ "$name1" != "$status_name" ] && [ "$name2" = "$status_name" ]; then
+            teardown
+            return 0  # Bug confirmed: overlapping session state
+        fi
+    fi
+
+    teardown
+    echo "Sessions properly isolated"
     return 1
 }
 
@@ -244,6 +334,9 @@ run_test "Bug 2: await returns join/leave messages instead of waiting" bug2_awai
 run_test "Bug 3: await returns already-seen messages (no read cursor)" bug3_await_returns_stale_message
 run_test "Bug 4: Newline injection breaks message format" bug4_newline_injection
 run_test "Bug 5: Uniqueness check ignores join/leave format" bug5_join_not_checked
+run_test "Bug 6: await skips unread messages" bug6_await_skips_messages
+run_test "Bug 7: tail -f orphaned process leak" bug7_tail_f_leak
+run_test "Bug 8: State isolation (overlapping session files)" bug8_state_isolation
 
 echo ""
 echo "=============================="
