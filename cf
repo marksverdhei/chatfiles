@@ -258,45 +258,20 @@ case "$CMD" in
         # Strip newlines to preserve one-message-one-line invariant
         msg="${1//$'\n'/ }"
         printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
-        LASTLINE=$(wc -l < "$CHATFILE")
-        save_session
         ;;
 
     await|a|wait|w)
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        TOTAL=$(wc -l < "$CHATFILE")
-        # Check for unread messages from others (skip system/join/leave lines)
-        if [ "$TOTAL" -gt "$LASTLINE" ]; then
-            current_line=$((LASTLINE + 1))
-            while [ "$current_line" -le "$TOTAL" ]; do
-                line=$(sed -n "${current_line}p" "$CHATFILE")
-                case "$line" in
-                    \[*) ;;
-                    "${MYNAME}:"*) ;;
-                    *)
-                        # Found an unread message
-                        LASTLINE=$current_line
-                        save_session
-                        echo "$line"
-                        exit 0
-                        ;;
-                esac
-                ((current_line++))
-            done
-        fi
-        # No unread messages — wait for new ones
-        LASTLINE=$TOTAL
-        save_session
-        exec 3< <(tail -f -n 0 "$CHATFILE")
+        exec 3< <(tail -n +$((LASTLINE + 1)) -f "$CHATFILE")
         TAILPID=$!
         trap 'kill $TAILPID 2>/dev/null' EXIT
         while IFS= read -r line <&3; do
+            ((LASTLINE++))
             case "$line" in
-                \[*) continue ;;
-                "${MYNAME}:"*) continue ;;
+                \[*) save_session; continue ;;
+                "${MYNAME}:"*) save_session; continue ;;
             esac
-            LASTLINE=$(wc -l < "$CHATFILE")
             save_session
             echo "$line"
             break
@@ -311,18 +286,16 @@ case "$CMD" in
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
         msg="${1//$'\n'/ }"
-        exec 3< <(tail -f -n 0 "$CHATFILE")
+        printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
+        exec 3< <(tail -n +$((LASTLINE + 1)) -f "$CHATFILE")
         TAILPID=$!
         trap 'kill $TAILPID 2>/dev/null' EXIT
-        printf '%s: %s\n' "$MYNAME" "$msg" >> "$CHATFILE"
-        LASTLINE=$(wc -l < "$CHATFILE")
-        save_session
         while IFS= read -r line <&3; do
+            ((LASTLINE++))
             case "$line" in
-                \[*) continue ;;
-                "${MYNAME}:"*) continue ;;
+                \[*) save_session; continue ;;
+                "${MYNAME}:"*) save_session; continue ;;
             esac
-            LASTLINE=$(wc -l < "$CHATFILE")
             save_session
             echo "$line"
             break
