@@ -21,12 +21,19 @@ CMD="${1:-help}"
 shift 2>/dev/null || true
 
 get_session_id() {
+    # 1. Use controlling TTY if available (stable across invocations)
     local tty
     tty=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' \n')
     if [ -n "$tty" ] && [ "$tty" != "?" ]; then
         echo "${tty//\//_}"
         return
     fi
+    # 2. Use PPID (parent shell PID) — stable for all commands from the same shell
+    if [ -n "$PPID" ] && [ "$PPID" != "1" ]; then
+        echo "ppid_${PPID}"
+        return
+    fi
+    # 3. Last resort: own SID (may vary per invocation in detached contexts)
     local sid
     sid=$(ps -o sid= -p $$ 2>/dev/null | tr -d ' \n')
     if [ -n "$sid" ]; then
@@ -366,7 +373,7 @@ Messaging:
 Info:
   cf status               Show current session
 
-State stored in .cf_session.<pid> or .cf_session (current directory)
+State stored in .cf_session.<tty|ppid> or .cf_session (current directory)
 Global rooms stored in ~/.chatfiles/
 EOF
         ;;
