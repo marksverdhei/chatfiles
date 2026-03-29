@@ -534,6 +534,77 @@ test_multiline_preserved() {
 }
 
 # ============================================================================
+# Additional Tests
+# ============================================================================
+
+test_delete_room_global() {
+    setup
+    "$CF_PATH" create-room -g myglobal >/dev/null
+    local output
+    output=$("$CF_PATH" delete-room myglobal 2>&1)
+    assert_contains "$output" "Deleted"
+    [ ! -f "$HOME/.chatfiles/myglobal.Chatfile" ] || { echo "Global room should be deleted" >&2; return 1; }
+    teardown
+}
+
+test_delete_room_no_argument() {
+    setup
+    local output exit_code
+    output=$("$CF_PATH" delete-room 2>&1) && exit_code=0 || exit_code=$?
+    assert_exit_code 1 "$exit_code"
+    assert_contains "$output" "Usage"
+    teardown
+}
+
+test_send_multiple_messages_appear_in_read() {
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    "$CF_PATH" register Chatfile >/dev/null
+    "$CF_PATH" join >/dev/null
+    "$CF_PATH" send "alpha" >/dev/null
+    "$CF_PATH" send "beta" >/dev/null
+    "$CF_PATH" send "gamma" >/dev/null
+    local output
+    output=$("$CF_PATH" read 20)
+    assert_contains "$output" "alpha"
+    assert_contains "$output" "beta"
+    assert_contains "$output" "gamma"
+    teardown
+}
+
+test_read_limited_shows_only_n_lines() {
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    "$CF_PATH" register Chatfile >/dev/null
+    "$CF_PATH" join >/dev/null
+    for i in {1..10}; do "$CF_PATH" send "msg$i" >/dev/null; done
+    local line_count
+    line_count=$("$CF_PATH" read 3 | wc -l)
+    [ "$line_count" -le 3 ] || { echo "Expected at most 3 lines, got $line_count" >&2; return 1; }
+    teardown
+}
+
+test_status_shows_joined_yes_after_join() {
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    "$CF_PATH" register Chatfile >/dev/null
+    "$CF_PATH" join >/dev/null
+    local output
+    output=$("$CF_PATH" status)
+    assert_contains "$output" "Joined: yes"
+    teardown
+}
+
+test_create_room_global_appears_in_list() {
+    setup
+    "$CF_PATH" create-room -g listed-global >/dev/null
+    local output
+    output=$("$CF_PATH" list-rooms)
+    assert_contains "$output" "listed-global"
+    teardown
+}
+
+# ============================================================================
 # Run All Tests
 # ============================================================================
 
@@ -590,6 +661,15 @@ echo "Edge Case Tests:"
 run_test "username uniqueness" test_username_uniqueness
 run_test "special characters in message" test_special_characters_in_message
 run_test "multiline preserved" test_multiline_preserved
+
+echo ""
+echo "Additional Tests:"
+run_test "delete-room (global)" test_delete_room_global
+run_test "delete-room (no argument)" test_delete_room_no_argument
+run_test "send multiple messages appear in read" test_send_multiple_messages_appear_in_read
+run_test "read (limited to n lines)" test_read_limited_shows_only_n_lines
+run_test "status shows Joined: yes after join" test_status_shows_joined_yes_after_join
+run_test "create-room global appears in list-rooms" test_create_room_global_appears_in_list
 
 echo ""
 echo "========================"
