@@ -188,7 +188,14 @@ case "$CMD" in
         done
 
         JOINED=""
-        printf '%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" > .cf_session
+        # Global rooms get a HOME-level session so any working directory can find it.
+        # Local rooms get a CWD-level session (directory-scoped).
+        if [[ "$CHATFILE" == "$GLOBAL_DIR"/* ]]; then
+            SESSION_FILE="$HOME/.cf_session"
+        else
+            SESSION_FILE=".cf_session"
+        fi
+        printf '%s\n%s\n%s\n' "$CHATFILE" "$MYNAME" "$JOINED" > "$SESSION_FILE"
         echo "$MYNAME"
         ;;
 

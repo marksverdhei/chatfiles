@@ -228,9 +228,31 @@ test_register_global_room() {
     setup
     "$CF_PATH" create-room globalroom -g 2>/dev/null || true
     "$CF_PATH" register globalroom >/dev/null
+    # Global room: session must be stored in $HOME/.cf_session, NOT the CWD
+    assert_file_not_exists ".cf_session"
+    assert_file_exists "$HOME/.cf_session"
     local chatfile
-    chatfile=$(head -1 .cf_session)
+    chatfile=$(head -1 "$HOME/.cf_session")
     assert_contains "$chatfile" ".chatfiles/globalroom.Chatfile"
+    teardown
+}
+
+test_global_session_persists_across_directories() {
+    setup
+    "$CF_PATH" create-room crossdir -g 2>/dev/null || true
+    "$CF_PATH" register crossdir >/dev/null
+    "$CF_PATH" join >/dev/null
+    # Move to a different directory and verify commands still work
+    local other_dir
+    other_dir=$(mktemp -d)
+    pushd "$other_dir" >/dev/null
+    local output
+    output=$("$CF_PATH" status)
+    assert_contains "$output" "Session:"
+    output=$("$CF_PATH" read 5)
+    assert_contains "$output" "crossdir"
+    popd >/dev/null
+    rm -rf "$other_dir"
     teardown
 }
 
@@ -536,6 +558,7 @@ echo "Session Management Tests:"
 run_test "register creates session" test_register_creates_session
 run_test "register by name" test_register_by_name
 run_test "register global room" test_register_global_room
+run_test "global session persists across dirs" test_global_session_persists_across_directories
 run_test "register (not found)" test_register_not_found
 run_test "join" test_join
 run_test "join (already joined)" test_join_already_joined
