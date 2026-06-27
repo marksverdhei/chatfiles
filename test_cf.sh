@@ -542,6 +542,28 @@ test_special_characters_in_message() {
     teardown
 }
 
+test_send_collapses_newlines() {
+    # Regression: a multi-line `send` arg must stay one physical line, or
+    # read/await misparse the wrapped text as a phantom sender (it has no
+    # "Name:" prefix). Newlines collapse to spaces.
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    local name rc=0 before after last
+    name=$("$CF_PATH" register Chatfile)
+    "$CF_PATH" join >/dev/null
+    before=$(wc -l < Chatfile)
+    "$CF_PATH" send "line one
+line two"
+    after=$(wc -l < Chatfile)
+    last=$(tail -n 1 Chatfile)
+    if [ "$((after - before))" -ne 1 ] || [ "$last" != "$name: line one line two" ]; then
+        echo "  multi-line send not collapsed: +$((after - before)) line(s), last='$last'" >&2
+        rc=1
+    fi
+    teardown
+    return $rc
+}
+
 test_multiline_preserved() {
     setup
     "$CF_PATH" create-room 2>/dev/null || true
@@ -685,6 +707,7 @@ echo "Edge Case Tests:"
 run_test "register survives name collisions (set -e)" test_register_survives_name_collisions
 run_test "username uniqueness" test_username_uniqueness
 run_test "special characters in message" test_special_characters_in_message
+run_test "send collapses newlines (one-line invariant)" test_send_collapses_newlines
 run_test "multiline preserved" test_multiline_preserved
 
 echo ""
