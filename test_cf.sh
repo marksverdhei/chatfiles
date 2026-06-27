@@ -489,6 +489,30 @@ test_help_flag() {
 # Edge Case Tests
 # ============================================================================
 
+test_register_survives_name_collisions() {
+    # Regression: `cf register`'s retry loop used `((attempts++))`, which under
+    # `set -e` aborts the whole script on the FIRST name collision (((0++))
+    # yields exit status 1). Fill a chunk of the name space so RANDOM collides
+    # often, then register many times — every one must still succeed.
+    setup
+    "$CF_PATH" create-room 2>/dev/null || true
+    awk 'BEGIN{
+        split("swift bold calm keen sage wild bright dark quick slow", a, " ");
+        split("fox owl raven wolf bear hawk crane lynx deer hare", n, " ");
+        for (i=1;i<=10;i++) for (j=1;j<=10;j++) for (s=1000;s<2800;s++)
+            printf "%s-%s-%d: taken\n", a[i], n[j], s
+    }' >> Chatfile
+
+    local rc=0 i name
+    for i in $(seq 1 30); do
+        rm -f .cf_session
+        name=$("$CF_PATH" register Chatfile 2>/dev/null) || { rc=1; break; }
+        [ -n "$name" ] || { rc=1; break; }
+    done
+    teardown
+    return $rc
+}
+
 test_username_uniqueness() {
     setup
     "$CF_PATH" create-room 2>/dev/null || true
@@ -658,6 +682,7 @@ run_test "help flag" test_help_flag
 
 echo ""
 echo "Edge Case Tests:"
+run_test "register survives name collisions (set -e)" test_register_survives_name_collisions
 run_test "username uniqueness" test_username_uniqueness
 run_test "special characters in message" test_special_characters_in_message
 run_test "multiline preserved" test_multiline_preserved

@@ -184,8 +184,17 @@ case "$CMD" in
             suffix=$((RANDOM % 9000 + 1000))
             MYNAME="${adj}-${noun}-${suffix}"
             grep -q "^${MYNAME}:" "$CHATFILE" 2>/dev/null || break
-            ((attempts++))
+            # NB: `((attempts++))` evaluates to the *old* value, so on the first
+            # iteration it yields 0 — which bash reports as exit status 1, and
+            # under `set -e` (above) that aborted the whole script on the very
+            # first name collision. An assignment always returns success.
+            attempts=$((attempts + 1))
         done
+
+        if [ "$attempts" -ge 100 ]; then
+            echo "Failed to generate a unique name after 100 attempts" >&2
+            exit 1
+        fi
 
         JOINED=""
         # Global rooms get a HOME-level session so any working directory can find it.
