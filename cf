@@ -230,7 +230,10 @@ case "$CMD" in
         [ -z "$1" ] && { echo "Usage: cf send \"message\"" >&2; exit 1; }
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        printf '%s: %s\n' "$MYNAME" "$1" >> "$CHATFILE"
+        # Collapse newlines so one send stays one line — the "Name: msg" invariant
+        # that read/await depend on. A literal newline would otherwise land as a
+        # prefix-less second line that await parses as a phantom sender.
+        printf '%s: %s\n' "$MYNAME" "${1//$'\n'/ }" >> "$CHATFILE"
         ;;
 
     await|a|wait|w)
@@ -248,7 +251,7 @@ case "$CMD" in
         [ -z "$1" ] && { echo "Usage: cf send-await \"message\"" >&2; exit 1; }
         load_session
         [ -z "$JOINED" ] && { echo "Must join first: cf join" >&2; exit 1; }
-        printf '%s: %s\n' "$MYNAME" "$1" >> "$CHATFILE"
+        printf '%s: %s\n' "$MYNAME" "${1//$'\n'/ }" >> "$CHATFILE"
         tail -f -n 0 "$CHATFILE" | head -n 1
         ;;
 
